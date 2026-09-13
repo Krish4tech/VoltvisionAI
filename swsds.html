@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SWSDS — Smart Wire Snap Detection System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-0:#080b10;
+  --bg-1:#0d1218;
+  --panel:rgba(16,22,30,0.82);
+  --panel-border:rgba(120,160,190,0.16);
+  --grid-line:rgba(110,150,180,0.05);
+  --text-hi:#e8f0f5;
+  --text-mid:#9fb1bd;
+  --text-lo:#5c6e79;
+  --accent:#3fd0e0;
+  --accent-dim:#1c5a63;
+  --amber:#e8a542;
+  --danger:#ff5d5d;
+  --danger-dim:#5a1f24;
+  --ok:#49d17e;
+  --wire-normal:#3a4c58;
+  --wire-flow:#4fd8e8;
+  --wire-selected:#ffcf5c;
+  --wire-snapped:#ff5d5d;
+  --house-body:#1b2530;
+  --house-roof:#2a3844;
+  --radius-s:4px;
+  --radius-m:8px;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;background:var(--bg-0);color:var(--text-hi);font-family:var(--sans);overflow:hidden;}
+body{
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(63,208,224,0.05), transparent 55%),
+    radial-gradient(ellipse at 85% 100%, rgba(232,165,66,0.04), transparent 50%),
+    var(--bg-0);
+}
+#app{position:relative;width:100vw;height:100vh;overflow:hidden;}
+
+/* ---------- top bar ---------- */
+#topbar{
+  position:absolute;top:0;left:0;right:0;height:56px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;z-index:40;
+  background:linear-gradient(180deg, rgba(8,11,16,0.92), rgba(8,11,16,0));
+  pointer-events:none;
+}
+#topbar > *{pointer-events:auto;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand .mark{
+  width:30px;height:30px;border-radius:7px;
+  background:linear-gradient(135deg,var(--accent),#1b6b76);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 14px rgba(63,208,224,0.35);
+}
+.brand .mark svg{width:16px;height:16px;}
+.brand-text{line-height:1.05;}
+.brand-text .t1{font-size:13.5px;font-weight:700;letter-spacing:0.3px;color:var(--text-hi);}
+.brand-text .t2{font-size:10.5px;color:var(--text-lo);font-family:var(--mono);}
+.topbar-actions{display:flex;gap:8px;}
+.pill-btn{
+  background:rgba(20,28,36,0.7);border:1px solid var(--panel-border);color:var(--text-mid);
+  font-family:var(--sans);font-size:12px;font-weight:500;padding:7px 13px;border-radius:20px;
+  cursor:pointer;transition:all .15s ease;display:flex;align-items:center;gap:6px;backdrop-filter:blur(6px);
+}
+.pill-btn:hover{color:var(--text-hi);border-color:rgba(63,208,224,0.4);background:rgba(63,208,224,0.08);}
+.pill-btn.accentish{color:var(--accent);border-color:rgba(63,208,224,0.3);}
+
+/* ---------- city stage ---------- */
+#stage-wrap{position:absolute;inset:0;}
+#citySvg{width:100%;height:100%;display:block;cursor:default;}
+
+.bg-grid-line{stroke:var(--grid-line);stroke-width:1;}
+.ground-line{stroke:rgba(120,160,190,0.08);stroke-width:1;}
+
+/* wires */
+.wire-hit{fill:none;stroke:transparent;stroke-width:22;cursor:pointer;}
+.wire-base{fill:none;stroke:var(--wire-normal);stroke-width:3;stroke-linecap:round;transition:stroke .2s ease, stroke-width .2s ease, filter .2s ease;}
+.wire-base.hover{stroke:#6f97a8;filter:drop-shadow(0 0 5px rgba(120,180,200,0.5));}
+.wire-base.selected{stroke:var(--wire-selected);stroke-width:4;filter:drop-shadow(0 0 8px rgba(255,207,92,0.65));}
+.wire-base.snapped{stroke:var(--wire-snapped);stroke-width:3;opacity:0.55;}
+.wire-flow{fill:none;stroke:var(--wire-flow);stroke-width:2;stroke-linecap:round;stroke-dasharray:1 9;opacity:0.9;
+  animation:flowmove 1s linear infinite;filter:drop-shadow(0 0 4px rgba(79,216,232,0.8));}
+.wire-flow.slow{animation-duration:2.6s;opacity:0.55;}
+.wire-flow.hidden{display:none;}
+@keyframes flowmove{to{stroke-dashoffset:-40;}}
+
+.spark{opacity:0;}
+.spark.show{opacity:1;animation:sparkburst .7s ease-out;}
+@keyframes sparkburst{0%{opacity:1;transform:scale(0.4);}60%{opacity:1;transform:scale(1.15);}100%{opacity:0;transform:scale(1);}}
+
+.warn-pulse{opacity:0;}
+.warn-pulse.show{opacity:1;animation:pulsetravel 1.1s ease-in-out infinite;}
+@keyframes pulsetravel{0%{opacity:0.15;r:4;}50%{opacity:0.9;r:8;}100%{opacity:0.15;r:4;}}
+
+/* transformer */
+.tf-body{fill:url(#tfGrad);stroke:#4a6070;stroke-width:1.5;}
+.tf-core{fill:#0f161d;stroke:#3a4c58;stroke-width:1;}
+.tf-terminal{fill:var(--amber);filter:drop-shadow(0 0 5px rgba(232,165,66,0.9));}
+.tf-terminal.hi{animation:termglow 1.6s ease-in-out infinite;}
+@keyframes termglow{0%,100%{opacity:0.65;}50%{opacity:1;}}
+#transformerGroup{cursor:pointer;}
+
+/* measurement nodes */
+.meas-box{fill:rgba(16,22,30,0.9);stroke:var(--panel-border);stroke-width:1;rx:5;}
+.meas-box.anomaly{stroke:var(--danger);}
+.meas-label{fill:var(--text-lo);font-family:var(--mono);font-size:9px;letter-spacing:0.5px;}
+.meas-value{fill:var(--text-hi);font-family:var(--mono);font-size:13px;font-weight:600;}
+.meas-node{cursor:pointer;}
+.meas-icon-ring{fill:none;stroke:var(--accent);stroke-width:1.4;}
+
+/* houses */
+.house-node{cursor:pointer;}
+.house-shell{fill:var(--house-body);stroke:#33424f;stroke-width:1;transition:stroke .2s ease;}
+.house-node:hover .house-shell{stroke:var(--accent);}
+.house-node.dead .house-shell{stroke:#4a2a2a;}
+.house-roof{fill:var(--house-roof);}
+.house-node.dead .house-roof{fill:#2a1e1e;}
+.house-window{fill:#0d141b;transition:fill .5s ease, opacity .5s ease;}
+.house-window.lit{fill:#f4c968;filter:drop-shadow(0 0 3px rgba(244,201,104,0.8));}
+.house-tag{fill:var(--text-lo);font-family:var(--mono);font-size:8.5px;}
+.house-node.dead .house-tag{fill:#7a4646;}
+.ac-unit{fill:#26333d;stroke:#3a4c58;stroke-width:0.8;}
+.ac-unit.active .ac-fins{stroke:var(--accent);}
+.ac-fins{stroke:#4c6270;stroke-width:0.6;}
+.ev-glow{fill:none;stroke:var(--ok);stroke-width:1.4;opacity:0;transition:opacity .4s ease;}
+.ev-glow.active{opacity:0.9;filter:drop-shadow(0 0 4px rgba(73,209,126,0.9));}
+
+/* house info card (above house) */
+.house-card{pointer-events:none;}
+.house-card rect{fill:rgba(10,14,19,0.86);stroke:rgba(120,160,190,0.14);stroke-width:1;}
+.house-card text{font-family:var(--mono);}
+.house-card .h-title{fill:var(--text-hi);font-size:9.5px;font-weight:600;}
+.house-card .h-total{fill:var(--accent);font-size:9.5px;font-weight:700;}
+.house-card .h-volt{fill:var(--text-lo);font-size:7.8px;}
+.house-card .h-volt.low{fill:var(--danger);}
+
+/* appliance chips inside expanded hover panel are HTML tooltip, not svg */
+
+/* ---------- floating glass panels ---------- */
+.glass-panel{
+  background:var(--panel);border:1px solid var(--panel-border);border-radius:var(--radius-m);
+  backdrop-filter:blur(10px);box-shadow:0 8px 30px rgba(0,0,0,0.35);
+}
+.panel-head{
+  display:flex;align-items:center;justify-content:space-between;padding:10px 13px;
+  border-bottom:1px solid var(--panel-border);
+}
+.panel-title{font-size:10.5px;font-weight:600;letter-spacing:1px;color:var(--text-mid);}
+.panel-title .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok);margin-right:7px;box-shadow:0 0 6px var(--ok);}
+.panel-title.status-anomaly .dot{background:var(--danger);box-shadow:0 0 8px var(--danger);}
+.panel-collapse{cursor:pointer;color:var(--text-lo);font-size:13px;user-select:none;}
+.panel-collapse:hover{color:var(--text-hi);}
+
+/* monitor panel */
+#monitorPanel{position:absolute;top:70px;right:18px;width:238px;z-index:35;}
+.monitor-body{padding:12px 13px;}
+.monitor-status-line{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:7px 9px;border-radius:6px;background:rgba(73,209,126,0.09);border:1px solid rgba(73,209,126,0.25);
+  margin-bottom:10px;transition:all .25s ease;
+}
+.monitor-status-line.anomaly{background:rgba(255,93,93,0.1);border-color:rgba(255,93,93,0.4);}
+.monitor-status-line .st-txt{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ok);letter-spacing:0.5px;}
+.monitor-status-line.anomaly .st-txt{color:var(--danger);}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px 10px;}
+.mcell{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:6px 8px;cursor:help;}
+.mcell .mk{font-size:9px;color:var(--text-lo);font-family:var(--mono);letter-spacing:0.5px;}
+.mcell .mv{font-size:14px;font-weight:600;color:var(--text-hi);font-family:var(--mono);margin-top:1px;}
+.mcell.wide{grid-column:1/3;}
+.conf-bar-track{height:5px;border-radius:3px;background:rgba(255,255,255,0.06);margin-top:6px;overflow:hidden;}
+.conf-bar-fill{height:100%;background:linear-gradient(90deg,var(--ok),var(--accent));width:0%;transition:width .5s ease, background .3s ease;}
+.conf-bar-fill.anomaly{background:linear-gradient(90deg,#ff9d5d,var(--danger));}
+
+/* controls panel */
+#controlsPanel{position:absolute;bottom:18px;left:18px;width:264px;z-index:35;}
+.ctrl-body{padding:12px 13px;}
+.ctrl-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;}
+.ctrl-row .ck{font-size:10px;color:var(--text-lo);font-family:var(--mono);}
+.ctrl-row .cv{font-size:12px;font-weight:600;color:var(--text-hi);font-family:var(--mono);}
+.btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:4px;}
+.ctrl-btn{
+  background:rgba(255,255,255,0.03);border:1px solid var(--panel-border);color:var(--text-mid);
+  font-family:var(--sans);font-size:11px;font-weight:500;padding:8px 6px;border-radius:6px;cursor:pointer;
+  transition:all .15s ease;text-align:center;
+}
+.ctrl-btn:hover{background:rgba(63,208,224,0.08);color:var(--text-hi);border-color:rgba(63,208,224,0.35);}
+.ctrl-btn:disabled{opacity:0.35;cursor:not-allowed;}
+.ctrl-btn:disabled:hover{background:rgba(255,255,255,0.03);color:var(--text-mid);border-color:var(--panel-border);}
+.ctrl-btn.danger{color:#ffb1b1;border-color:rgba(255,93,93,0.28);}
+.ctrl-btn.danger:hover{background:rgba(255,93,93,0.12);border-color:var(--danger);}
+.ctrl-btn.full{grid-column:1/3;}
+
+/* graph panel */
+#graphPanel{position:absolute;bottom:18px;left:300px;right:280px;height:158px;z-index:34;}
+.graph-body{padding:8px 13px 10px;height:calc(100% - 39px);position:relative;}
+#graphCanvas{width:100%;height:100%;display:block;}
+.graph-legend{position:absolute;top:6px;right:13px;display:flex;gap:10px;font-family:var(--mono);font-size:9px;color:var(--text-lo);}
+.graph-legend span{display:flex;align-items:center;gap:4px;}
+.graph-legend i{width:9px;height:2px;display:inline-block;border-radius:2px;}
+
+/* legend panel */
+#legendPanel{position:absolute;bottom:184px;left:18px;width:264px;z-index:33;}
+.legend-body{padding:9px 13px;display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-mid);}
+.legend-swatch{width:14px;height:3px;border-radius:2px;flex-shrink:0;}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+/* tooltip */
+#tooltip{
+  position:absolute;z-index:100;pointer-events:none;max-width:250px;
+  background:rgba(10,14,19,0.96);border:1px solid rgba(120,160,190,0.25);border-radius:7px;
+  padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,0.5);opacity:0;transform:translateY(4px);
+  transition:opacity .12s ease, transform .12s ease;
+}
+#tooltip.show{opacity:1;transform:translateY(0);}
+#tooltip .tt-title{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:0.6px;margin-bottom:6px;font-family:var(--mono);}
+#tooltip .tt-row{display:flex;justify-content:space-between;gap:14px;font-size:11px;margin-bottom:2px;}
+#tooltip .tt-row .tk{color:var(--text-lo);}
+#tooltip .tt-row .tv{color:var(--text-hi);font-family:var(--mono);font-weight:600;}
+#tooltip .tt-note{font-size:10px;color:var(--text-mid);margin-top:6px;line-height:1.4;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px;}
+#tooltip .tt-status{display:inline-block;padding:1px 7px;border-radius:9px;font-size:9.5px;font-family:var(--mono);font-weight:700;}
+#tooltip .tt-status.ok{background:rgba(73,209,126,0.15);color:var(--ok);}
+#tooltip .tt-status.bad{background:rgba(255,93,93,0.15);color:var(--danger);}
+#tooltip .tt-status.warn{background:rgba(232,165,66,0.15);color:var(--amber);}
+
+/* notification */
+#notifyWrap{position:absolute;top:70px;left:50%;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:8px;align-items:center;}
+.notify{
+  background:rgba(20,10,10,0.94);border:1px solid rgba(255,93,93,0.45);border-radius:8px;
+  padding:11px 18px;display:flex;align-items:center;gap:11px;box-shadow:0 10px 34px rgba(255,60,60,0.18);
+  transform:translateY(-14px);opacity:0;animation:slidein .35s ease forwards;min-width:300px;
+}
+.notify.info{background:rgba(10,16,22,0.94);border-color:rgba(63,208,224,0.4);box-shadow:0 10px 34px rgba(63,208,224,0.15);}
+@keyframes slidein{to{transform:translateY(0);opacity:1;}}
+.notify .n-ic{font-size:18px;flex-shrink:0;}
+.notify .n-txt .n-t1{font-size:12px;font-weight:700;color:var(--text-hi);}
+.notify .n-txt .n-t2{font-size:10.5px;color:var(--text-mid);margin-top:1px;}
+
+/* explanation modal */
+#modalOverlay{position:absolute;inset:0;background:rgba(4,6,9,0.72);backdrop-filter:blur(3px);z-index:200;display:none;align-items:center;justify-content:center;}
+#modalOverlay.show{display:flex;}
+#explainModal{width:640px;max-width:92vw;max-height:84vh;overflow-y:auto;}
+.modal-body{padding:18px 22px 22px;}
+.explain-step{display:flex;gap:13px;padding:11px 0;border-bottom:1px solid rgba(255,255,255,0.05);opacity:0.45;transition:opacity .3s ease, transform .3s ease;transform:translateX(0);}
+.explain-step.active{opacity:1;transform:translateX(4px);}
+.explain-step:last-child{border-bottom:none;}
+.explain-num{
+  width:24px;height:24px;border-radius:50%;background:rgba(63,208,224,0.1);border:1px solid rgba(63,208,224,0.35);
+  display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:var(--accent);flex-shrink:0;
+}
+.explain-step.active .explain-num{background:var(--accent);color:#04141a;font-weight:700;}
+.explain-txt{font-size:12.5px;color:var(--text-mid);line-height:1.5;padding-top:2px;}
+.explain-step.active .explain-txt{color:var(--text-hi);}
+.modal-close-row{display:flex;justify-content:flex-end;padding:0 22px 18px;gap:8px;}
+
+.scan-hint{
+  position:absolute;bottom:184px;left:300px;right:280px;top:70px;
+  display:flex;align-items:flex-start;justify-content:center;pointer-events:none;
+}
+.hint-chip{
+  margin-top:2px;background:rgba(10,14,19,0.55);border:1px solid rgba(120,160,190,0.14);
+  padding:6px 14px;border-radius:20px;font-size:10.5px;color:var(--text-lo);font-family:var(--mono);
+  backdrop-filter:blur(4px);
+}
+
+::-webkit-scrollbar{width:8px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(120,160,190,0.25);border-radius:4px;}
+
+@media (max-width:1100px){
+  #graphPanel{left:18px;right:18px;bottom:340px;height:130px;}
+  #legendPanel{display:none;}
+  #controlsPanel{bottom:18px;}
+  #monitorPanel{width:210px;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <div class="brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" fill="#04141a"/></svg></div>
+      <div class="brand-text">
+        <div class="t1">SWSDS</div>
+        <div class="t2">SMART WIRE SNAP DETECTION</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="pill-btn accentish" id="btnHow">How SWSDS Works</button>
+      <button class="pill-btn" id="btnLegendToggle">Legend</button>
+    </div>
+  </div>
+
+  <div id="stage-wrap">
+    <svg id="citySvg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <radialGradient id="tfGrad" cx="35%" cy="30%" r="80%">
+          <stop offset="0%" stop-color="#2a3a46"/>
+          <stop offset="100%" stop-color="#161f27"/>
+        </radialGradient>
+        <linearGradient id="groundGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#0d1218"/>
+          <stop offset="100%" stop-color="#0a0d12"/>
+        </linearGradient>
+        <pattern id="gridPattern" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M40 0H0V40" class="bg-grid-line"/>
+        </pattern>
+      </defs>
+      <rect x="0" y="0" width="1600" height="900" fill="url(#groundGrad)"/>
+      <rect x="0" y="0" width="1600" height="900" fill="url(#gridPattern)"/>
+      <line x1="0" y1="470" x2="1600" y2="470" class="ground-line"/>
+      <g id="wiresLayer"></g>
+      <g id="transformerLayer"></g>
+      <g id="measureLayer"></g>
+      <g id="housesLayer"></g>
+    </svg>
+  </div>
+
+  <div class="scan-hint" id="scanHint"><div class="hint-chip">HOVER TO INSPECT · CLICK A LINE TO SELECT</div></div>
+
+  <!-- Monitor Panel -->
+  <div id="monitorPanel" class="glass-panel">
+    <div class="panel-head">
+      <div class="panel-title" id="monitorTitle"><span class="dot"></span>SWSDS MONITOR</div>
+      <div class="panel-collapse" data-collapse="monitorPanel">–</div>
+    </div>
+    <div class="monitor-body" id="monitorBody">
+      <div class="monitor-status-line" id="statusLine">
+        <span class="st-txt" id="statusTxt">NORMAL</span>
+        <span style="font-size:9.5px;color:var(--text-lo);font-family:var(--mono);" id="statusSub">No abnormality</span>
+      </div>
+      <div class="mgrid">
+        <div class="mcell" data-tip="v1"><div class="mk">V1 · VOLTAGE</div><div class="mv"><span id="valV1">0.0</span> V</div></div>
+        <div class="mcell" data-tip="i1"><div class="mk">I1 · CURRENT</div><div class="mv"><span id="valI1">0.0</span> A</div></div>
+        <div class="mcell" data-tip="v2"><div class="mk">V2 · VOLTAGE</div><div class="mv"><span id="valV2">0.0</span> V</div></div>
+        <div class="mcell" data-tip="i2"><div class="mk">I2 · CURRENT</div><div class="mv"><span id="valI2">0.0</span> A</div></div>
+        <div class="mcell" data-tip="z1"><div class="mk">Z1</div><div class="mv"><span id="valZ1">0.0</span> Ω</div></div>
+        <div class="mcell" data-tip="z2"><div class="mk">Z2</div><div class="mv"><span id="valZ2">0.0</span> Ω</div></div>
+        <div class="mcell" data-tip="dv"><div class="mk">ΔV</div><div class="mv"><span id="valDV">0.0</span> V</div></div>
+        <div class="mcell" data-tip="di"><div class="mk">ΔI</div><div class="mv"><span id="valDI">0.0</span> A</div></div>
+        <div class="mcell wide" data-tip="dz">
+          <div class="mk">ΔZ · IMPEDANCE DEVIATION</div>
+          <div class="mv"><span id="valDZ">0.0</span> Ω</div>
+          <div class="conf-bar-track"><div class="conf-bar-fill" id="confBar"></div></div>
+        </div>
+        <div class="mcell wide" data-tip="conf">
+          <div class="mk">DETECTION CONFIDENCE</div>
+          <div class="mv"><span id="valConf">0</span>%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Graph Panel -->
+  <div id="graphPanel" class="glass-panel">
+    <div class="panel-head">
+      <div class="panel-title">LIVE MEASUREMENT TREND</div>
+      <div class="panel-collapse" data-collapse="graphPanel">–</div>
+    </div>
+    <div class="graph-body" id="graphBody">
+      <div class="graph-legend">
+        <span><i style="background:#4fd8e8"></i>V1</span>
+        <span><i style="background:#ffcf5c"></i>V2</span>
+        <span><i style="background:#49d17e"></i>I1</span>
+        <span><i style="background:#ff8fd0"></i>I2</span>
+      </div>
+      <canvas id="graphCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Controls Panel -->
+  <div id="controlsPanel" class="glass-panel">
+    <div class="panel-head">
+      <div class="panel-title"><span class="dot" id="runDot"></span>SIMULATION CONTROL</div>
+      <div class="panel-collapse" data-collapse="controlsPanel">–</div>
+    </div>
+    <div class="ctrl-body" id="controlsBody">
+      <div class="ctrl-row"><span class="ck">STATE</span><span class="cv" id="runState">RUNNING</span></div>
+      <div class="ctrl-row"><span class="ck">NEXT LOAD UPDATE</span><span class="cv" id="nextUpdate">02:00</span></div>
+      <div class="ctrl-row"><span class="ck">SELECTED LINE</span><span class="cv" id="selectedWireTxt">NONE</span></div>
+      <div class="btn-grid">
+        <button class="ctrl-btn" id="btnPause">Pause</button>
+        <button class="ctrl-btn" id="btnResume">Resume</button>
+        <button class="ctrl-btn full" id="btnSimLoad">Simulate Load Change</button>
+        <button class="ctrl-btn danger full" id="btnSnap" disabled>Snap Selected Wire</button>
+        <button class="ctrl-btn full" id="btnReset">Reset Simulation</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legend Panel -->
+  <div id="legendPanel" class="glass-panel">
+    <div class="panel-head"><div class="panel-title">LEGEND</div><div class="panel-collapse" data-collapse="legendPanel">–</div></div>
+    <div class="legend-body" id="legendBody">
+      <div class="legend-item"><span class="legend-swatch" style="background:#4fd8e8"></span>Electrical flow</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#3a4c58"></span>Connected wire</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#ffcf5c"></span>Selected wire</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#ff5d5d"></span>Snapped wire</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#49d17e"></span>Normal measurement</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#ff5d5d"></span>Anomaly</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#f4c968"></span>Active appliance</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#5c6e79"></span>Idle appliance</div>
+    </div>
+  </div>
+
+  <div id="notifyWrap"></div>
+  <div id="tooltip"></div>
+
+  <div id="modalOverlay">
+    <div id="explainModal" class="glass-panel">
+      <div class="panel-head">
+        <div class="panel-title">HOW SWSDS WORKS</div>
+        <div class="panel-collapse" id="btnCloseModal">✕</div>
+      </div>
+      <div class="modal-body" id="explainSteps"></div>
+      <div class="modal-close-row">
+        <button class="pill-btn accentish" id="btnCloseModal2">Close</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =====================================================================
+   0. CONFIG & UTILITIES
+===================================================================== */
+const NOMINAL_V = 230;
+const R_TRANSFORMER = 0.06;      // ohm, transformer internal regulation resistance
+const LOAD_UPDATE_INTERVAL = 120; // seconds (2 minutes), per spec
+const TICK_MS = 1000;             // measurement recompute cadence
+const GRAPH_MAX_POINTS = 90;
+const ANOMALY_THRESHOLDS = { dV: 34, dI: 9, dZ: 6.5 }; // engineering-judgment thresholds, calibrated with headroom above normal load variance
+
+function rnd(min,max){ return min + Math.random()*(max-min); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+function lerp(a,b,t){ return a + (b-a)*t; }
+function fmt(v,d){ return (isFinite(v)?v:0).toFixed(d==null?1:d); }
+function uid(prefix){ return prefix+'_'+Math.random().toString(36).slice(2,9); }
+
+/* =====================================================================
+   1. APPLIANCE DEFINITIONS  (the 8 categories required in each house card)
+===================================================================== */
+const APPLIANCES = [
+  { key:'fridge',    label:'Fridge',      unit:false, min:80,   max:250,  cycles:true,  evening:false, note:'Compressor cycles on/off to hold target temperature.' },
+  { key:'ac',        label:'AC',          unit:false, min:800,  max:2000, cycles:true,  daytime:true,   note:'Runs more during warm daytime hours; cycles with thermostat.' },
+  { key:'microwave', label:'Microwave',   unit:false, min:800,  max:1500, burst:true,   note:'Short high-load bursts during meal preparation.' },
+  { key:'led',       label:'LED Light',   unit:true,  min:5,    max:20,   evening:true, note:'More units lit during evening / night occupancy.' },
+  { key:'fan',       label:'Fan',         unit:false, min:50,   max:100,  daytime:true,  note:'Correlates with occupancy and simulated warmth.' },
+  { key:'iron',      label:'Iron Box',    unit:false, min:1000, max:2000, burst:true,   note:'Short high-load session, a few times a day.' },
+  { key:'toaster',   label:'Toaster',     unit:false, min:800,  max:1500, burst:true,   note:'Brief high-load use around breakfast/evening.' },
+  { key:'ev',        label:'EV Charging', unit:false, min:1000, max:7400, longburst:true, note:'Begins/ends with simulated vehicle charging schedule.' }
+];
+
+/* 12 heterogeneous household profiles (section 36) */
+const HOUSE_PROFILES = [
+  { name:'Moderate household',      fridge:1, ac:1, microwave:1, led:6,  fan:2, iron:1, toaster:1, ev:0, acBias:0.45, ledBias:0.5, evChance:0 },
+  { name:'High AC usage',           fridge:1, ac:3, microwave:1, led:5,  fan:2, iron:1, toaster:1, ev:0, acBias:0.8,  ledBias:0.45, evChance:0 },
+  { name:'Low consumption',         fridge:1, ac:0, microwave:1, led:3,  fan:1, iron:0, toaster:1, ev:0, acBias:0.1,  ledBias:0.3, evChance:0 },
+  { name:'EV charging household',   fridge:1, ac:1, microwave:1, led:5,  fan:2, iron:1, toaster:1, ev:1, acBias:0.4, ledBias:0.4, evChance:0.55 },
+  { name:'High appliance activity', fridge:2, ac:2, microwave:1, led:9,  fan:3, iron:1, toaster:1, ev:0, acBias:0.6,  ledBias:0.55, evChance:0 },
+  { name:'Moderate household',      fridge:1, ac:1, microwave:1, led:6,  fan:2, iron:1, toaster:0, ev:0, acBias:0.42, ledBias:0.48, evChance:0 },
+  { name:'Family with children',    fridge:1, ac:2, microwave:1, led:8,  fan:3, iron:1, toaster:1, ev:0, acBias:0.55, ledBias:0.6, evChance:0 },
+  { name:'Energy efficient home',   fridge:1, ac:1, microwave:1, led:4,  fan:1, iron:0, toaster:1, ev:0, acBias:0.25, ledBias:0.3, evChance:0 },
+  { name:'Weekend-heavy usage',     fridge:1, ac:1, microwave:1, led:6,  fan:2, iron:1, toaster:1, ev:0, acBias:0.4,  ledBias:0.5, evChance:0 },
+  { name:'Small apartment',         fridge:1, ac:1, microwave:1, led:3,  fan:1, iron:0, toaster:0, ev:0, acBias:0.3,  ledBias:0.35, evChance:0 },
+  { name:'EV + high AC household',  fridge:1, ac:2, microwave:1, led:6,  fan:2, iron:1, toaster:1, ev:1, acBias:0.7, ledBias:0.5, evChance:0.5 },
+  { name:'Minimal / elderly',       fridge:1, ac:0, microwave:1, led:4,  fan:1, iron:0, toaster:0, ev:0, acBias:0.15, ledBias:0.4, evChance:0 }
+];
+
+/* =====================================================================
+   2. CITY TOPOLOGY  (transformer -> V1/I1 -> trunk of 12 nodes(+houses) -> V2/I2)
+===================================================================== */
+const N_HOUSES = 12;
+const TF_POS = {x:95, y:470};
+const V1_POS = {x:230, y:470};
+const V2_POS = {x:1470, y:470};
+const trunkXs = [];
+for(let i=0;i<N_HOUSES;i++){
+  trunkXs.push(320 + i*((V2_POS.x-70-320)/(N_HOUSES-1)));
+}
+const HOUSES = [];
+for(let i=0;i<N_HOUSES;i++){
+  const above = (i%2===0);
+  HOUSES.push({
+    id:'house_'+(i+1),
+    idx:i,
+    label:'House '+String(i+1).padStart(2,'0'),
+    nodeX: trunkXs[i], nodeY:470,
+    x: trunkXs[i], y: above ? 250 : 690,
+    above,
+    profile: HOUSE_PROFILES[i],
+    spurWireId:'spur_'+(i+1)
+  });
+}
+
+/* wire list: trunk segments (13, transformer/V1 area to V2) + spurs (12 to houses) */
+const WIRES = [];
+{
+  // segment 0: transformer -> V1
+  WIRES.push({id:'trunk_0', type:'trunk', order:0, x1:TF_POS.x+34, y1:TF_POS.y, x2:V1_POS.x, y2:V1_POS.y, resistance:0.005, length:18});
+  // segment 1: V1 -> node0
+  WIRES.push({id:'trunk_1', type:'trunk', order:1, x1:V1_POS.x, y1:V1_POS.y, x2:trunkXs[0], y2:470, resistance:0.008, length:26});
+  for(let i=0;i<N_HOUSES-1;i++){
+    WIRES.push({id:'trunk_'+(i+2), type:'trunk', order:i+2, x1:trunkXs[i], y1:470, x2:trunkXs[i+1], y2:470, resistance:0.010, length:32});
+  }
+  // final segment: last node -> V2
+  WIRES.push({id:'trunk_last', type:'trunk', order:N_HOUSES+1, x1:trunkXs[N_HOUSES-1], y1:470, x2:V2_POS.x, y2:470, resistance:0.008, length:26});
+  // spurs
+  HOUSES.forEach((h,i)=>{
+    WIRES.push({id:h.spurWireId, type:'spur', houseIdx:i, x1:h.nodeX, y1:470, x2:h.x, y2:h.above?300:640, resistance:0.05, length:20});
+  });
+}
+WIRES.forEach(w=>{ w.status='connected'; w.selected=false; w.snapped=false; w.current=0; w.voltage=0; w.power=0; });
+const trunkOrder = WIRES.filter(w=>w.type==='trunk').sort((a,b)=>a.order-b.order);
+
+/* =====================================================================
+   3. SIMULATION STATE
+===================================================================== */
+const state = {
+  running:true,
+  simClockMin: 8*60, // start at 8:00 AM simulated
+  nextUpdateIn: LOAD_UPDATE_INTERVAL,
+  selectedWireId:null,
+  anySnapped:false,
+  houseAppliance: {},  // houseId -> {key:{count,active,load}}
+  houseTotals: {},     // houseId -> watts
+  houseVoltage: {},    // houseId -> volts
+  houseConnected: {},  // houseId -> bool
+  measurements: {V1:NOMINAL_V,I1:0,V2:NOMINAL_V,I2:0,Z1:0,Z2:0,dV:0,dI:0,dZ:0,confidence:0,status:'NORMAL'},
+  displayed: {},        // smoothed values for animated counters
+  graphData: [],
+  transformerLoad:0,
+  transformerUtil:0
+};
+
+/* init appliance instance state per house */
+HOUSES.forEach(h=>{
+  const p = h.profile;
+  const inst = {};
+  APPLIANCES.forEach(a=>{
+    const count = p[a.key] || 0;
+    inst[a.key] = { count, active: count>0 && Math.random()<0.6, load:0 };
+  });
+  state.houseAppliance[h.id] = inst;
+  state.houseConnected[h.id] = true;
+});
+
+/* =====================================================================
+   4. LOAD MODEL — compute realistic per-appliance load given house profile & sim clock
+===================================================================== */
+function timeFactors(simMin){
+  const hour = (simMin/60)%24;
+  const eveningness = clamp(1 - Math.abs(((hour+24-19)%24) - 3)/9, 0, 1); // peak ~19:00-22:00
+  const heat = clamp(1 - Math.abs(hour-15)/9, 0, 1); // peak mid-afternoon
+  return { hour, eveningness, heat };
+}
+
+function recomputeApplianceInstance(house, key, def, tf, forceChangeChance){
+  const inst = state.houseAppliance[house.id][key];
+  const p = house.profile;
+  if(inst.count<=0){ inst.active=false; inst.load=0; return; }
+  let onProb = 0.35;
+  if(def.evening) onProb = 0.15 + tf.eveningness*(p.ledBias!=null?p.ledBias:0.5)*1.1;
+  if(def.daytime && key==='ac') onProb = 0.1 + tf.heat*(p.acBias!=null?p.acBias:0.4)*1.3;
+  if(def.daytime && key==='fan') onProb = 0.2 + tf.heat*0.6;
+  if(key==='fridge') onProb = 0.72; // mostly on, cycles
+  if(def.burst) onProb = 0.14; // short-duration appliances mostly off
+  if(def.longburst) onProb = p.evChance || 0.05;
+
+  const changeChance = def.burst ? 0.5 : (def.longburst ? 0.35 : forceChangeChance);
+  if(Math.random() < changeChance){
+    inst.active = Math.random() < onProb;
+  }
+  if(inst.active){
+    const unitLoad = rnd(def.min, def.max);
+    inst.load = def.unit ? unitLoad*inst.count : unitLoad*(key==='ac'||key==='fan'?Math.max(1,Math.round(inst.count*rnd(0.5,1))):1);
+    if(!def.unit && inst.count>1 && key!=='ac' && key!=='fan'){ inst.load = unitLoad; }
+  } else {
+    inst.load = 0;
+  }
+}
+
+function updateAllLoads(fullChange){
+  const tf = timeFactors(state.simClockMin);
+  HOUSES.forEach(house=>{
+    APPLIANCES.forEach(def=>{
+      recomputeApplianceInstance(house, def.key, def, tf, fullChange? 0.9 : 0.28);
+    });
+    let total = 0;
+    const inst = state.houseAppliance[house.id];
+    APPLIANCES.forEach(def=>{ total += inst[def.key].load; });
+    state.houseTotals[house.id] = total;
+  });
+}
+
+/* =====================================================================
+   5. ELECTRICAL MODEL — topology aware, derives V1/I1/V2/I2/Z1/Z2 from state
+===================================================================== */
+function isWireSnapped(id){ const w=WIRES.find(x=>x.id===id); return w && w.snapped; }
+
+function computeElectricalModel(){
+  // Determine connectivity: walk trunk in order; once a trunk wire is snapped, everything after is unreachable AND V2 is unreachable.
+  let brokenAt = -1;
+  for(let i=0;i<trunkOrder.length;i++){
+    if(trunkOrder[i].snapped){ brokenAt = trunkOrder[i].order; break; }
+  }
+  const trunkBroken = brokenAt>=0;
+
+  // For each house: connected if (a) its own spur isn't snapped, and (b) the trunk path up to its node isn't broken before it
+  HOUSES.forEach(h=>{
+    const nodeOrder = h.idx+2; // trunk_0(0)->TF-V1, trunk_1(1)->V1-node0 ... node i sits after wire order i+1
+    const spur = WIRES.find(w=>w.id===h.spurWireId);
+    const trunkOk = !trunkBroken || nodeOrder <= brokenAt; // node reachable if break occurs at or after this node's feed segment
+    const connected = trunkOk && !spur.snapped;
+    state.houseConnected[h.id] = connected;
+  });
+
+  let pReachable = 0;
+  HOUSES.forEach(h=>{ if(state.houseConnected[h.id]) pReachable += (state.houseTotals[h.id]||0); });
+
+  // I1: total current the transformer supplies right now (sum of everything still reachable)
+  const I1_est = pReachable / NOMINAL_V;
+  const V1 = clamp(NOMINAL_V + (28 - I1_est) * 0.09, 222, 234); // light load -> slight rise, heavy load -> slight dip
+  const I1 = pReachable / V1;
+
+  // Trunk resistance total (used for the V1->V2 drop when fully intact)
+  const R_total_trunk = trunkOrder.reduce((s,w)=>s+w.resistance,0);
+
+  let V2, I2;
+  if(trunkBroken){
+    // V2 sensor isolated from the source entirely -> voltage collapses, tiny residual current
+    V2 = clamp(rnd(0.5,6), 0, 8);
+    I2 = clamp(rnd(0.01,0.06),0.005,0.2);
+  } else {
+    V2 = V1 - I1 * R_total_trunk; // small realistic line-loss drop
+    I2 = I1 * rnd(0.985, 0.998); // tiny measurement/leakage variance, same loop current
+  }
+
+  // house voltages: interpolate V1..V2 across their trunk position; disconnected -> ~0
+  HOUSES.forEach(h=>{
+    if(!state.houseConnected[h.id]){ state.houseVoltage[h.id] = 0; return; }
+    const t = (h.idx+1)/(N_HOUSES+1);
+    let v = trunkBroken ? V1*rnd(0.99,1.01) : lerp(V1, V2, t);
+    state.houseVoltage[h.id] = v;
+  });
+
+  const Z1 = V1 / Math.max(I1, 0.01);
+  const Z2 = V2 / Math.max(I2, 0.01);
+  const dV = Math.abs(V1-V2);
+  const dI = Math.abs(I1-I2);
+  const dZ = Math.abs(Z1-Z2);
+
+  // confidence score from weighted deviation ratios (not a hardcoded fault flag)
+  const scoreV = dV/ANOMALY_THRESHOLDS.dV;
+  const scoreI = dI/ANOMALY_THRESHOLDS.dI;
+  const scoreZ = dZ/ANOMALY_THRESHOLDS.dZ;
+  const rawScore = (scoreV*0.4 + scoreI*0.25 + scoreZ*0.35);
+  const confidence = clamp(rawScore*55, 0, 99);
+  const status = rawScore >= 1.0 ? 'ANOMALY' : 'NORMAL';
+
+  state.transformerLoad = pReachable;
+  state.transformerUtil = clamp((pReachable/45000)*100,0,100);
+
+  state.measurements = {V1,I1,V2,I2,Z1,Z2,dV,dI,dZ,confidence,status};
+}
+
+/* =====================================================================
+   6. SVG BUILD (once) + WIRE / HOUSE MARKUP
+===================================================================== */
+const svgNS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent){
+  const n = document.createElementNS(svgNS, tag);
+  if(attrs) for(const k in attrs) n.setAttribute(k, attrs[k]);
+  if(parent) parent.appendChild(n);
+  return n;
+}
+
+const wiresLayer = document.getElementById('wiresLayer');
+const transformerLayer = document.getElementById('transformerLayer');
+const measureLayer = document.getElementById('measureLayer');
+const housesLayer = document.getElementById('housesLayer');
+
+function buildWires(){
+  wiresLayer.innerHTML='';
+  WIRES.forEach(w=>{
+    const g = el('g',{ 'data-wire':w.id, class:'wire-node' }, wiresLayer);
+    el('path',{ d:pathFor(w), class:'wire-hit' }, g);
+    el('path',{ d:pathFor(w), class:'wire-base', 'data-role':'base' }, g);
+    el('path',{ d:pathFor(w), class:'wire-flow'+(w.type==='spur'?' slow':''), 'data-role':'flow' }, g);
+    el('circle',{ cx:(w.x1+w.x2)/2, cy:(w.y1+w.y2)/2, r:5, class:'spark', 'data-role':'spark', fill:'#ff5d5d' }, g);
+    el('circle',{ cx:(w.x1+w.x2)/2, cy:(w.y1+w.y2)/2, r:4, class:'warn-pulse', 'data-role':'pulse', fill:'none', stroke:'#ff5d5d', 'stroke-width':2 }, g);
+  });
+}
+function pathFor(w){ return `M${w.x1},${w.y1} L${w.x2},${w.y2}`; }
+function brokenPathA(w){
+  const mx=(w.x1+w.x2)/2, my=(w.y1+w.y2)/2;
+  const t=0.42;
+  return `M${w.x1},${w.y1} L${lerp(w.x1,mx,t)},${lerp(w.y1,my,t)}`;
+}
+function brokenPathB(w){
+  const mx=(w.x1+w.x2)/2, my=(w.y1+w.y2)/2;
+  const t=0.42;
+  return `M${lerp(w.x2,mx,t)},${lerp(w.y2,my,t)} L${w.x2},${w.y2}`;
+}
+
+function buildTransformer(){
+  transformerLayer.innerHTML='';
+  const g = el('g',{id:'transformerGroup','data-tf':'1'}, transformerLayer);
+  el('rect',{x:TF_POS.x-40,y:TF_POS.y-60,width:80,height:120,rx:8,class:'tf-body'}, g);
+  el('rect',{x:TF_POS.x-24,y:TF_POS.y-40,width:48,height:80,rx:6,class:'tf-core'}, g);
+  for(let i=0;i<3;i++){
+    el('circle',{cx:TF_POS.x, cy:TF_POS.y-24+i*24, r:5, class:'tf-terminal hi'}, g);
+  }
+  el('circle',{cx:TF_POS.x+34,cy:TF_POS.y,r:3,class:'tf-terminal'}, g);
+  el('text',{x:TF_POS.x, y:TF_POS.y+78, 'text-anchor':'middle', class:'meas-label', 'font-size':'10'}, g).textContent='TRANSFORMER';
+}
+
+function buildMeasurePoint(pos, labelV, labelI, idPrefix){
+  const g = el('g',{'data-meas':idPrefix, class:'meas-node'}, measureLayer);
+  el('rect',{x:pos.x-46,y:pos.y-96,width:92,height:60,rx:7,class:'meas-box','data-role':'box'}, g);
+  el('circle',{cx:pos.x,cy:pos.y-66,r:9,class:'meas-icon-ring'}, g);
+  el('text',{x:pos.x,y:pos.y-62,'text-anchor':'middle',class:'meas-label',fill:'#3fd0e0','font-size':'9'}, g).textContent='V';
+  el('text',{x:pos.x,y:pos.y-40,'text-anchor':'middle',class:'meas-value','font-size':'11','data-role':'vtext'}, g).textContent=labelV+': --';
+  el('rect',{x:pos.x-46,y:pos.y+36,width:92,height:60,rx:7,class:'meas-box','data-role':'box2'}, g);
+  el('rect',{x:pos.x-11,y:pos.y+46,width:22,height:16,rx:3,fill:'none',stroke:'#e8a542','stroke-width':1.4}, g);
+  el('text',{x:pos.x,y:pos.y+58,'text-anchor':'middle',class:'meas-label',fill:'#e8a542','font-size':'8'}, g).textContent='CT';
+  el('text',{x:pos.x,y:pos.y+80,'text-anchor':'middle',class:'meas-value','font-size':'11','data-role':'itext'}, g).textContent=labelI+': --';
+  el('line',{x1:pos.x,y1:pos.y-36,x2:pos.x,y2:pos.y-8,stroke:'#3a4c58','stroke-width':2}, g);
+  el('line',{x1:pos.x,y1:pos.y+8,x2:pos.x,y2:pos.y+36,stroke:'#3a4c58','stroke-width':2}, g);
+  el('text',{x:pos.x,y:pos.y+112,'text-anchor':'middle',class:'meas-label','font-size':'9'}, g).textContent=idPrefix==='v1i1'?'START OF LINE':'END OF LINE';
+  return g;
+}
+
+function houseIcon(h, g){
+  const w=76, hh=54;
+  const x0 = h.x - w/2, y0 = h.y - hh/2;
+  el('polygon',{points:`${x0-6},${y0+6} ${h.x},${y0-22} ${x0+w+6},${y0+6}`, class:'house-roof'}, g);
+  el('rect',{x:x0,y:y0+6,width:w,height:hh-6,rx:3,class:'house-shell'}, g);
+  // windows (lit by LED state)
+  const winPositions = [[-24,10],[-2,10],[20,10]];
+  winPositions.forEach((p,i)=>{
+    el('rect',{x:h.x+p[0]-7,y:y0+p[1]+10,width:14,height:12,class:'house-window','data-role':'win'+i}, g);
+  });
+  // door
+  el('rect',{x:h.x-6,y:y0+hh-20,width:12,height:20,fill:'#141c24'}, g);
+  // AC unit box (right side)
+  el('rect',{x:x0+w-2,y:y0+hh-24,width:16,height:12,rx:2,class:'ac-unit','data-role':'acunit'}, g);
+  el('line',{x1:x0+w+1,y1:y0+hh-20,x2:x0+w+12,y2:y0+hh-20,class:'ac-fins'}, g);
+  el('line',{x1:x0+w+1,y1:y0+hh-16,x2:x0+w+12,y2:y0+hh-16,class:'ac-fins'}, g);
+  // EV glow ring near base
+  el('circle',{cx:x0-8,cy:y0+hh-4,r:6,class:'ev-glow','data-role':'evglow'}, g);
+  el('text',{x:h.x,y:h.above? y0-28 : y0+hh+16,'text-anchor':'middle',class:'house-tag'}, g).textContent=h.label;
+}
+
+function houseInfoCard(h, g){
+  const cardW=118, cardH= h.above? 96 : 96;
+  const cardX = h.x-cardW/2;
+  const cardY = h.above ? h.y-54-cardH-10 : h.y+54+16;
+  const cg = el('g',{class:'house-card','data-role':'card'}, g);
+  el('rect',{x:cardX,y:cardY,width:cardW,height:cardH,rx:6}, cg);
+  el('text',{x:cardX+9,y:cardY+15,class:'h-title'}, cg).textContent=h.label;
+  el('text',{x:cardX+cardW-9,y:cardY+15,'text-anchor':'end',class:'h-total','data-role':'totalText'}, cg).textContent='0 W';
+  const icons=['fridge','ac','microwave','led','fan','iron','toaster','ev'];
+  const cols=4;
+  icons.forEach((k,i)=>{
+    const cx = cardX+13+ (i%cols)*26;
+    const cy = cardY+32+ Math.floor(i/cols)*24;
+    el('circle',{cx,cy,r:8,'data-role':'chip_'+k, fill:'#1c2530',stroke:'#33424f'}, cg);
+    el('text',{x:cx,y:cy+3,'text-anchor':'middle','font-size':'8','fill':'#7d8f9b','data-role':'chiptxt_'+k}, cg).textContent=k[0].toUpperCase();
+  });
+  el('text',{x:cardX+9,y:cardY+cardH-8,class:'h-volt','data-role':'voltText'}, cg).textContent='0.0 V received';
+  return cg;
+}
+
+function buildHouses(){
+  housesLayer.innerHTML='';
+  HOUSES.forEach(h=>{
+    const g = el('g',{'data-house':h.id, class:'house-node'}, housesLayer);
+    houseIcon(h,g);
+    houseInfoCard(h,g);
+  });
+}
+
+/* build everything once */
+buildWires();
+buildTransformer();
+buildMeasurePoint(V1_POS,'V1','I1','v1i1');
+buildMeasurePoint(V2_POS,'V2','I2','v2i2');
+buildHouses();
+
+/* =====================================================================
+   7. INTERACTION: hover / click / select / snap
+===================================================================== */
+const tooltip = document.getElementById('tooltip');
+let hoveredWireId=null, hoveredHouseId=null;
+
+function showTooltip(html, evt){
+  tooltip.innerHTML = html;
+  tooltip.classList.add('show');
+  positionTooltip(evt);
+}
+function positionTooltip(evt){
+  const pad=16;
+  let x = evt.clientX+pad, y = evt.clientY+pad;
+  const rect = tooltip.getBoundingClientRect();
+  if(x+rect.width>window.innerWidth-10) x = evt.clientX-rect.width-pad;
+  if(y+rect.height>window.innerHeight-10) y = evt.clientY-rect.height-pad;
+  tooltip.style.left = x+'px';
+  tooltip.style.top = y+'px';
+}
+function hideTooltip(){ tooltip.classList.remove('show'); }
+
+const citySvg = document.getElementById('citySvg');
+
+citySvg.addEventListener('mousemove', (e)=>{
+  if(tooltip.classList.contains('show')) positionTooltip(e);
+});
+
+citySvg.addEventListener('mouseover', (e)=>{
+  const wireG = e.target.closest('[data-wire]');
+  const tfG = e.target.closest('[data-tf]');
+  const measG = e.target.closest('[data-meas]');
+  const houseG = e.target.closest('[data-house]');
+
+  if(wireG){
+    const id = wireG.getAttribute('data-wire');
+    hoveredWireId = id;
+    renderWireVisual(id);
+    showTooltip(wireTooltipHTML(id), e);
+    return;
+  }
+  if(tfG){ showTooltip(transformerTooltipHTML(), e); return; }
+  if(measG){ showTooltip(measureTooltipHTML(measG.getAttribute('data-meas')), e); return; }
+  if(houseG){
+    hoveredHouseId = houseG.getAttribute('data-house');
+    showTooltip(houseTooltipHTML(hoveredHouseId), e);
+    return;
+  }
+});
+
+citySvg.addEventListener('mouseout', (e)=>{
+  const wireG = e.target.closest('[data-wire]');
+  if(wireG && !wireG.contains(e.relatedTarget)){
+    hoveredWireId=null;
+    renderWireVisual(wireG.getAttribute('data-wire'));
+  }
+  if(!e.target.closest('[data-wire],[data-tf],[data-meas],[data-house]')) hideTooltip();
+  const houseG = e.target.closest('[data-house]');
+  if(houseG && !houseG.contains(e.relatedTarget)){ hoveredHouseId=null; }
+  if(!citySvg.contains(e.relatedTarget)) hideTooltip();
+});
+
+citySvg.addEventListener('click', (e)=>{
+  const wireG = e.target.closest('[data-wire]');
+  if(wireG){
+    const id = wireG.getAttribute('data-wire');
+    const w = WIRES.find(x=>x.id===id);
+    if(w.snapped) return;
+    WIRES.forEach(x=>x.selected=false);
+    state.selectedWireId = (state.selectedWireId===id) ? null : id;
+    if(state.selectedWireId) w.selected=true;
+    WIRES.forEach(x=>renderWireVisual(x.id));
+    updateControlsPanel();
+  }
+});
+
+function wireTooltipHTML(id){
+  const w = WIRES.find(x=>x.id===id);
+  const status = w.snapped ? 'SNAPPED' : (w.selected?'SELECTED':'CONNECTED');
+  const cls = w.snapped ? 'bad' : (w.selected?'warn':'ok');
+  const kind = w.type==='trunk' ? 'Main distribution line' : 'House connection branch';
+  const houseNote = w.type==='spur' ? `<div class="tt-note">Feeds ${HOUSES[w.houseIdx].label} only. Snapping this isolates just that house.</div>` :
+    `<div class="tt-note">Carries current for all houses downstream of this point. Snapping breaks continuity to the end-of-line sensor (V2/I2).</div>`;
+  return `<div class="tt-title">ELECTRICAL LINE</div>
+    <div class="tt-row"><span class="tk">Status</span><span class="tt-status ${cls}">${status}</span></div>
+    <div class="tt-row"><span class="tk">Section</span><span class="tv">${kind}</span></div>
+    <div class="tt-row"><span class="tk">Current</span><span class="tv">${fmt(w.current,2)} A</span></div>
+    <div class="tt-row"><span class="tk">Voltage</span><span class="tv">${fmt(w.voltage,1)} V</span></div>
+    <div class="tt-row"><span class="tk">Power</span><span class="tv">${fmt(w.power,0)} W</span></div>
+    ${houseNote}`;
+}
+function transformerTooltipHTML(){
+  const m = state.measurements;
+  return `<div class="tt-title">TRANSFORMER</div>
+    <div class="tt-row"><span class="tk">Status</span><span class="tt-status ok">ONLINE</span></div>
+    <div class="tt-row"><span class="tk">Total Connected Load</span><span class="tv">${fmt(state.transformerLoad,0)} W</span></div>
+    <div class="tt-row"><span class="tk">Current Output</span><span class="tv">${fmt(m.I1,2)} A</span></div>
+    <div class="tt-row"><span class="tk">Voltage</span><span class="tv">${fmt(m.V1,1)} V</span></div>
+    <div class="tt-row"><span class="tk">Load Utilization</span><span class="tv">${fmt(state.transformerUtil,0)} %</span></div>`;
+}
+function measureTooltipHTML(which){
+  const m = state.measurements;
+  if(which==='v1i1'){
+    return `<div class="tt-title">START MEASUREMENT · V1 / I1</div>
+      <div class="tt-row"><span class="tk">V1 Voltage</span><span class="tv">${fmt(m.V1,1)} V</span></div>
+      <div class="tt-row"><span class="tk">I1 Current (CT)</span><span class="tv">${fmt(m.I1,2)} A</span></div>
+      <div class="tt-note">Measured immediately after the transformer, before power reaches the distribution network.</div>`;
+  }
+  return `<div class="tt-title">END MEASUREMENT · V2 / I2</div>
+    <div class="tt-row"><span class="tk">V2 Voltage</span><span class="tv">${fmt(m.V2,1)} V</span></div>
+    <div class="tt-row"><span class="tk">I2 Current (CT)</span><span class="tv">${fmt(m.I2,2)} A</span></div>
+    <div class="tt-note">Measured at the far end of the circuit. SWSDS compares this against V1/I1 to detect discontinuities.</div>`;
+}
+function houseTooltipHTML(hid){
+  const h = HOUSES.find(x=>x.id===hid);
+  const inst = state.houseAppliance[hid];
+  const total = state.houseTotals[hid]||0;
+  const volt = state.houseVoltage[hid]||0;
+  const connected = state.houseConnected[hid];
+  let rows='';
+  APPLIANCES.forEach(a=>{
+    const i = inst[a.key];
+    if(i.count<=0) return;
+    rows += `<div class="tt-row"><span class="tk">${a.label} ×${i.count}</span><span class="tv">${i.active?fmt(i.load,0)+' W':'OFF'}</span></div>`;
+  });
+  return `<div class="tt-title">${h.label.toUpperCase()} · ${h.profile.name}</div>
+    ${rows}
+    <div class="tt-row" style="margin-top:5px;border-top:1px solid rgba(255,255,255,0.06);padding-top:5px;"><span class="tk">TOTAL LOAD</span><span class="tv">${fmt(total,0)} W</span></div>
+    <div class="tt-row"><span class="tk">VOLTAGE RECEIVED</span><span class="tv">${connected?fmt(volt,1)+' V':'0.0 V (isolated)'}</span></div>
+    ${!connected?'<div class="tt-note">This house is currently disconnected from the network due to a broken electrical line upstream.</div>':''}`;
+}
+
+/* mgrid explanatory hovers */
+const MCELL_EXPLAIN = {
+  v1:['V1 — START VOLTAGE','Voltage measured right after the transformer output, at the beginning of the distribution line.'],
+  i1:['I1 — START CURRENT','Current measured via a Current Transformer (CT) at the start of the line, derived from total connected load.'],
+  v2:['V2 — END VOLTAGE','Voltage measured at the far end of the circuit, after line resistance has caused a small drop.'],
+  i2:['I2 — END CURRENT','Current measured via CT at the end of line. In healthy operation this closely tracks I1 (conservation of current).'],
+  z1:['Z1 — START IMPEDANCE','Z1 = V1 / I1. An apparent impedance computed from the start-of-line measurements.'],
+  z2:['Z2 — END IMPEDANCE','Z2 = V2 / I2. Compared against Z1 to reveal discontinuities in the line.'],
+  dv:['ΔV — VOLTAGE DIFFERENCE','|V1 − V2|. Spikes sharply when a line breaks, since the far side loses its source voltage.'],
+  di:['ΔI — CURRENT DIFFERENCE','|I1 − I2|. Diverges when current can no longer complete its path to the end sensor.'],
+  dz:['ΔZ — IMPEDANCE DEVIATION','|Z1 − Z2|. The core SWSDS signal — a large deviation indicates a likely wire snap.'],
+  conf:['DETECTION CONFIDENCE','A score derived from how far ΔV, ΔI and ΔZ exceed their configured thresholds — not a hardcoded flag.']
+};
+document.querySelectorAll('[data-tip]').forEach(cell=>{
+  cell.addEventListener('mouseenter', (e)=>{
+    const [t,d] = MCELL_EXPLAIN[cell.getAttribute('data-tip')];
+    showTooltip(`<div class="tt-title">${t}</div><div class="tt-note" style="border:none;padding:0;margin:0;">${d}</div>`, e);
+  });
+  cell.addEventListener('mousemove', positionTooltip);
+  cell.addEventListener('mouseleave', hideTooltip);
+});
+
+/* =====================================================================
+   8. RENDER: wires, houses, transformer, monitor, graph
+===================================================================== */
+function renderWireVisual(id){
+  const w = WIRES.find(x=>x.id===id);
+  const g = wiresLayer.querySelector(`[data-wire="${id}"]`);
+  if(!g||!w) return;
+  const base = g.querySelector('[data-role="base"]');
+  const flow = g.querySelector('[data-role="flow"]');
+  const spark = g.querySelector('[data-role="spark"]');
+  const pulse = g.querySelector('[data-role="pulse"]');
+  base.classList.remove('hover','selected','snapped');
+  if(w.snapped){
+    base.classList.add('snapped');
+    base.setAttribute('d', brokenPathA(w));
+    // second broken stub drawn via a duplicate node stored lazily
+    let stub = g.querySelector('[data-role="baseB"]');
+    if(!stub){ stub = el('path',{class:'wire-base snapped','data-role':'baseB'}, g); }
+    stub.setAttribute('d', brokenPathB(w));
+    flow.classList.add('hidden');
+    spark.classList.add('show');
+  } else {
+    base.setAttribute('d', pathFor(w));
+    const stub = g.querySelector('[data-role="baseB"]');
+    if(stub) stub.remove();
+    flow.setAttribute('d', pathFor(w));
+    flow.classList.remove('hidden');
+    if(hoveredWireId===id) base.classList.add('hover');
+    if(w.selected) base.classList.add('selected');
+  }
+  const affectedByFault = state.anySnapped && w.type==='trunk' && isDownstreamAffected(w);
+  pulse.classList.toggle('show', affectedByFault && !w.snapped);
+}
+function isDownstreamAffected(w){
+  const brokenOrders = WIRES.filter(x=>x.snapped && x.type==='trunk').map(x=>x.order);
+  if(!brokenOrders.length) return false;
+  const minBroken = Math.min(...brokenOrders);
+  return w.order > minBroken;
+}
+
+function renderHouseVisual(h){
+  const g = housesLayer.querySelector(`[data-house="${h.id}"]`);
+  if(!g) return;
+  const connected = state.houseConnected[h.id];
+  g.classList.toggle('dead', !connected);
+  const inst = state.houseAppliance[h.id];
+  const ledOn = connected && inst.led.active;
+  for(let i=0;i<3;i++){
+    const win = g.querySelector(`[data-role="win${i}"]`);
+    if(win) win.classList.toggle('lit', ledOn && Math.random()>0.15);
+  }
+  const acUnit = g.querySelector('[data-role="acunit"]');
+  if(acUnit) acUnit.classList.toggle('active', connected && inst.ac.active);
+  const evGlow = g.querySelector('[data-role="evglow"]');
+  if(evGlow) evGlow.classList.toggle('active', connected && inst.ev.active);
+
+  // card
+  const total = state.houseTotals[h.id]||0;
+  const volt = state.houseVoltage[h.id]||0;
+  const totalText = g.querySelector('[data-role="totalText"]');
+  if(totalText) totalText.textContent = fmt(total,0)+' W';
+  const voltText = g.querySelector('[data-role="voltText"]');
+  if(voltText){
+    voltText.textContent = (connected?fmt(volt,1):'0.0')+' V received';
+    voltText.classList.toggle('low', !connected || volt < 210);
+  }
+  APPLIANCES.forEach(a=>{
+    const chip = g.querySelector(`[data-role="chip_${a.key}"]`);
+    const i = inst[a.key];
+    if(!chip) return;
+    const on = connected && i.active && i.count>0;
+    chip.setAttribute('fill', on ? 'rgba(244,201,104,0.18)' : '#1c2530');
+    chip.setAttribute('stroke', on ? '#f4c968' : '#33424f');
+  });
+}
+
+function updateWireElectricals(){
+  // assign current/voltage/power to each wire from computed model, for tooltip realism
+  const m = state.measurements;
+  trunkOrder.forEach((w,idx)=>{
+    if(w.snapped){ w.current=0; w.voltage=0; w.power=0; return; }
+    // downstream power sum for this segment
+    let p=0;
+    HOUSES.forEach(h=>{
+      const nodeOrder = h.idx+2;
+      if(state.houseConnected[h.id] && nodeOrder>=w.order) p += state.houseTotals[h.id]||0;
+    });
+    const v = lerp(m.V1, m.V2, idx/(trunkOrder.length-1||1));
+    w.voltage=v;
+    w.current = p>0 ? p/Math.max(v,1) : m.I1*0.02;
+    w.power = p;
+  });
+  WIRES.filter(w=>w.type==='spur').forEach(w=>{
+    const h = HOUSES[w.houseIdx];
+    if(w.snapped || !state.houseConnected[h.id]){ w.current=0; w.voltage=0; w.power=0; return; }
+    w.voltage = state.houseVoltage[h.id];
+    w.power = state.houseTotals[h.id]||0;
+    w.current = w.power/Math.max(w.voltage,1);
+  });
+}
+
+function renderTransformer(){
+  const terms = transformerLayer.querySelectorAll('.tf-terminal.hi');
+  const speed = clamp(1.9 - state.transformerUtil/100*1.2, 0.7, 1.9);
+  terms.forEach(t=>{ t.style.animationDuration = speed+'s'; });
+}
+
+function renderMonitor(){
+  const m = state.measurements;
+  const disp = state.displayed;
+  ['V1','I1','V2','I2','Z1','Z2'].forEach(k=>{
+    if(disp[k]==null) disp[k]=m[k];
+    disp[k] = lerp(disp[k], m[k], 0.18);
+  });
+  disp.dV = Math.abs(disp.V1-disp.V2);
+  disp.dI = Math.abs(disp.I1-disp.I2);
+  disp.dZ = Math.abs(disp.Z1-disp.Z2);
+  if(disp.confidence==null) disp.confidence=0;
+  disp.confidence = lerp(disp.confidence, m.confidence, 0.15);
+
+  document.getElementById('valV1').textContent = fmt(disp.V1,1);
+  document.getElementById('valI1').textContent = fmt(disp.I1,2);
+  document.getElementById('valV2').textContent = fmt(disp.V2,1);
+  document.getElementById('valI2').textContent = fmt(disp.I2,2);
+  document.getElementById('valZ1').textContent = fmt(disp.Z1,2);
+  document.getElementById('valZ2').textContent = fmt(disp.Z2,2);
+  document.getElementById('valDV').textContent = fmt(disp.dV,1);
+  document.getElementById('valDI').textContent = fmt(disp.dI,2);
+  document.getElementById('valDZ').textContent = fmt(disp.dZ,2);
+  document.getElementById('valConf').textContent = Math.round(disp.confidence);
+
+  const bar = document.getElementById('confBar');
+  bar.style.width = clamp(disp.confidence,0,100)+'%';
+  bar.classList.toggle('anomaly', m.status==='ANOMALY');
+
+  const statusLine = document.getElementById('statusLine');
+  const statusTxt = document.getElementById('statusTxt');
+  const statusSub = document.getElementById('statusSub');
+  const monitorTitle = document.getElementById('monitorTitle');
+  const anomaly = m.status==='ANOMALY';
+  statusLine.classList.toggle('anomaly', anomaly);
+  statusTxt.textContent = anomaly ? 'ANOMALY DETECTED' : 'NORMAL';
+  statusSub.textContent = anomaly ? 'Possible wire snap / discontinuity' : 'No abnormality';
+  monitorTitle.classList.toggle('status-anomaly', anomaly);
+
+  // v1/i1/v2/i2 labels on svg
+  const v1g = measureLayer.querySelector('[data-meas="v1i1"]');
+  const v2g = measureLayer.querySelector('[data-meas="v2i2"]');
+  if(v1g){ v1g.querySelector('[data-role="vtext"]').textContent = 'V1: '+fmt(disp.V1,1); v1g.querySelector('[data-role="itext"]').textContent='I1: '+fmt(disp.I1,2); }
+  if(v2g){ v2g.querySelector('[data-role="vtext"]').textContent = 'V2: '+fmt(disp.V2,1); v2g.querySelector('[data-role="itext"]').textContent='I2: '+fmt(disp.I2,2); }
+  [v1g,v2g].forEach(g=>{ if(g) g.querySelectorAll('[data-role="box"],[data-role="box2"]').forEach(b=>b.classList.toggle('anomaly',anomaly)); });
+}
+
+/* graph (canvas) */
+const graphCanvas = document.getElementById('graphCanvas');
+const gctx = graphCanvas.getContext('2d');
+function resizeCanvas(){
+  if(!gctx) return;
+  const rect = graphCanvas.getBoundingClientRect();
+  graphCanvas.width = Math.max(rect.width,1)*2; graphCanvas.height = Math.max(rect.height,1)*2;
+  gctx.setTransform(2,0,0,2,0,0);
+}
+window.addEventListener('resize', resizeCanvas);
+
+let eventMarkers = [];
+function pushGraphSample(){
+  const m = state.measurements;
+  state.graphData.push({V1:m.V1,V2:m.V2,I1:m.I1,I2:m.I2,anomaly:m.status==='ANOMALY'});
+  if(state.graphData.length>GRAPH_MAX_POINTS) state.graphData.shift();
+  drawGraph();
+}
+function drawGraph(){
+  if(!gctx) return;
+  const rect = graphCanvas.getBoundingClientRect();
+  const W=rect.width, H=rect.height;
+  gctx.clearRect(0,0,W,H);
+  const data = state.graphData;
+  if(data.length<2) return;
+  const vMax = Math.max(240, ...data.map(d=>Math.max(d.V1,d.V2)))+4;
+  const vMin = Math.min(0, ...data.map(d=>Math.min(d.V1,d.V2)))-4;
+  const iMax = Math.max(10, ...data.map(d=>Math.max(d.I1,d.I2)))+2;
+
+  function drawLine(key, color, isCurrent){
+    gctx.beginPath();
+    data.forEach((d,i)=>{
+      const x = (i/(GRAPH_MAX_POINTS-1))*W;
+      const val = d[key];
+      const norm = isCurrent ? val/iMax : (val-vMin)/(vMax-vMin);
+      const y = H - norm*H*0.92 - 4;
+      if(i===0) gctx.moveTo(x,y); else gctx.lineTo(x,y);
+    });
+    gctx.strokeStyle=color; gctx.lineWidth=1.6; gctx.stroke();
+  }
+  gctx.globalAlpha=1;
+  drawLine('V1','#4fd8e8', false);
+  drawLine('V2','#ffcf5c', false);
+  drawLine('I1','#49d17e', true);
+  drawLine('I2','#ff8fd0', true);
+
+  data.forEach((d,i)=>{
+    if(d.anomaly){
+      const x = (i/(GRAPH_MAX_POINTS-1))*W;
+      gctx.fillStyle='rgba(255,93,93,0.12)';
+      gctx.fillRect(x-1,0,3,H);
+    }
+  });
+}
+
+/* =====================================================================
+   9. NOTIFICATIONS
+===================================================================== */
+function notify(title, sub, kind){
+  const wrap = document.getElementById('notifyWrap');
+  const n = document.createElement('div');
+  n.className = 'notify'+(kind==='info'?' info':'');
+  n.innerHTML = `<div class="n-ic">${kind==='info'?'ℹ️':'⚠️'}</div><div class="n-txt"><div class="n-t1">${title}</div><div class="n-t2">${sub}</div></div>`;
+  wrap.appendChild(n);
+  setTimeout(()=>{ n.style.transition='opacity .4s ease, transform .4s ease'; n.style.opacity='0'; n.style.transform='translateY(-10px)'; setTimeout(()=>n.remove(),420); }, 4200);
+}
+
+/* =====================================================================
+   10. CONTROLS
+===================================================================== */
+const btnPause=document.getElementById('btnPause');
+const btnResume=document.getElementById('btnResume');
+const btnSimLoad=document.getElementById('btnSimLoad');
+const btnSnap=document.getElementById('btnSnap');
+const btnReset=document.getElementById('btnReset');
+const runState=document.getElementById('runState');
+const runDot=document.getElementById('runDot');
+const nextUpdateEl=document.getElementById('nextUpdate');
+const selectedWireTxt=document.getElementById('selectedWireTxt');
+
+function updateControlsPanel(){
+  runState.textContent = state.running?'RUNNING':'PAUSED';
+  runDot.style.background = state.running? 'var(--ok)':'var(--amber)';
+  const mm=Math.floor(state.nextUpdateIn/60), ss=Math.floor(state.nextUpdateIn%60);
+  nextUpdateEl.textContent = String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0');
+  btnPause.disabled = !state.running;
+  btnResume.disabled = state.running;
+  const w = state.selectedWireId ? WIRES.find(x=>x.id===state.selectedWireId) : null;
+  selectedWireTxt.textContent = w ? (w.type==='trunk'?'Main line segment':'House branch: '+HOUSES[w.houseIdx].label) : 'NONE';
+  btnSnap.disabled = !w;
+}
+
+btnPause.addEventListener('click', ()=>{ state.running=false; updateControlsPanel(); });
+btnResume.addEventListener('click', ()=>{ state.running=true; updateControlsPanel(); });
+btnSimLoad.addEventListener('click', ()=>{ updateAllLoads(true); notify('Load change simulated','Appliance states updated across the city.', 'info'); });
+btnSnap.addEventListener('click', ()=>{
+  const w = state.selectedWireId ? WIRES.find(x=>x.id===state.selectedWireId) : null;
+  if(!w) return;
+  snapWire(w.id);
+});
+btnReset.addEventListener('click', resetSimulation);
+
+function snapWire(id){
+  const w = WIRES.find(x=>x.id===id);
+  if(!w || w.snapped) return;
+  w.snapped = true;
+  w.selected = false;
+  state.selectedWireId = null;
+  state.anySnapped = WIRES.some(x=>x.snapped);
+  renderWireVisual(id);
+  const g = wiresLayer.querySelector(`[data-wire="${id}"] [data-role="spark"]`);
+  if(g){ g.classList.remove('show'); void g.getBoundingClientRect(); g.classList.add('show'); }
+  const kind = w.type==='trunk' ? 'main distribution line' : (HOUSES[w.houseIdx].label+' branch line');
+  notify('WIRE SNAPPED', 'Physical break on '+kind+'. Re-analyzing network measurements…', null);
+  updateControlsPanel();
+  setTimeout(()=>{
+    if(state.measurements.status==='ANOMALY'){
+      notify('SWSDS: ANOMALY DETECTED', 'Measurement deviation exceeds configured thresholds.', null);
+    }
+  }, 1300);
+}
+
+function resetSimulation(){
+  WIRES.forEach(w=>{ w.snapped=false; w.selected=false; });
+  state.selectedWireId=null;
+  state.anySnapped=false;
+  state.graphData=[];
+  state.displayed={};
+  state.nextUpdateIn = LOAD_UPDATE_INTERVAL;
+  state.simClockMin = 8*60;
+  HOUSES.forEach(h=>{ state.houseConnected[h.id]=true; });
+  updateAllLoads(true);
+  WIRES.forEach(w=>renderWireVisual(w.id));
+  updateControlsPanel();
+  notify('Simulation reset', 'All lines reconnected. Network restored to normal operation.', 'info');
+}
+
+/* collapse panels */
+document.querySelectorAll('[data-collapse]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const panel = document.getElementById(btn.getAttribute('data-collapse'));
+    const body = panel.querySelector('.monitor-body,.ctrl-body,.graph-body,.legend-body');
+    const collapsed = body.style.display==='none';
+    body.style.display = collapsed ? '' : 'none';
+    btn.textContent = collapsed ? '–' : '+';
+  });
+});
+
+/* legend toggle button in topbar */
+document.getElementById('btnLegendToggle').addEventListener('click', ()=>{
+  const panel = document.getElementById('legendPanel');
+  panel.style.display = panel.style.display==='none' ? '' : 'none';
+});
+
+/* =====================================================================
+   11. EXPLANATION MODAL
+===================================================================== */
+const EXPLAIN_STEPS = [
+  'Power enters the simulated network from the transformer.',
+  'V1 and I1 are measured immediately at the start of the distribution line.',
+  'Electricity flows through the electrical lines and branches into each house.',
+  'V2 and I2 are measured again at the far end of the circuit.',
+  'SWSDS continuously compares V1/I1 against V2/I2, including their impedance ratio Z = V / I.',
+  'Snapping a wire physically changes the network topology — some houses may lose power.',
+  'That topology change alters the real measurements: ΔV, ΔI and ΔZ shift away from their normal range.',
+  'SWSDS classifies the deviation as an anomaly once it crosses the configured thresholds — never from the button click itself.'
+];
+const explainStepsEl = document.getElementById('explainSteps');
+EXPLAIN_STEPS.forEach((t,i)=>{
+  const row = document.createElement('div');
+  row.className='explain-step';
+  row.innerHTML = `<div class="explain-num">${i+1}</div><div class="explain-txt">${t}</div>`;
+  explainStepsEl.appendChild(row);
+});
+let explainTimer=null, explainIdx=0;
+function openExplain(){
+  document.getElementById('modalOverlay').classList.add('show');
+  explainIdx=0;
+  const rows = explainStepsEl.querySelectorAll('.explain-step');
+  rows.forEach(r=>r.classList.remove('active'));
+  function step(){
+    rows.forEach(r=>r.classList.remove('active'));
+    rows[explainIdx].classList.add('active');
+    explainIdx = (explainIdx+1)%rows.length;
+  }
+  step();
+  explainTimer = setInterval(step, 1900);
+}
+function closeExplain(){
+  document.getElementById('modalOverlay').classList.remove('show');
+  clearInterval(explainTimer);
+}
+document.getElementById('btnHow').addEventListener('click', openExplain);
+document.getElementById('btnCloseModal').addEventListener('click', closeExplain);
+document.getElementById('btnCloseModal2').addEventListener('click', closeExplain);
+document.getElementById('modalOverlay').addEventListener('click', (e)=>{ if(e.target.id==='modalOverlay') closeExplain(); });
+
+/* =====================================================================
+   12. MAIN LOOPS
+===================================================================== */
+function tick(){
+  if(!state.running){ updateControlsPanel(); return; }
+  state.simClockMin += 6; // sim clock advances ~6 sim-minutes per real second
+  state.nextUpdateIn -= 1;
+  if(state.nextUpdateIn<=0){
+    state.nextUpdateIn = LOAD_UPDATE_INTERVAL;
+    updateAllLoads(false);
+  }
+  computeElectricalModel();
+  updateWireElectricals();
+  HOUSES.forEach(h=>renderHouseVisual(h));
+  renderTransformer();
+  renderMonitor();
+  pushGraphSample();
+  updateControlsPanel();
+}
+
+/* init */
+updateAllLoads(true);
+computeElectricalModel();
+updateWireElectricals();
+HOUSES.forEach(h=>renderHouseVisual(h));
+WIRES.forEach(w=>renderWireVisual(w.id));
+renderTransformer();
+renderMonitor();
+resizeCanvas();
+pushGraphSample();
+updateControlsPanel();
+
+setInterval(tick, TICK_MS);
+
+window.__SWSDS = { state, WIRES, HOUSES, snapWire, resetSimulation, computeElectricalModel };
+
+})();
+</script>
+</body>
+</html>
