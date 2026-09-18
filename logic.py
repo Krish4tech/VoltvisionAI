@@ -20,7 +20,7 @@ RANGES = {
 }
 
 @dataclass
-class Appliance:
+class Appliance:    #logic
     name: str
     count: int
     active: bool
