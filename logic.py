@@ -1,3 +1,7 @@
+from dataclasses import dataclass
+from typing import Optional
+import random
+
 V_NOMINAL = 230.0
 
 RANGES = {
