@@ -1,7 +1,3 @@
-from dataclasses import dataclass
-from typing import Optional
-import random
-
 V_NOMINAL = 230.0
 
 RANGES = {
@@ -20,8 +16,8 @@ RANGES = {
 }
 
 @dataclass
-class Appliance:    #logic
-    name: str
+class Appliance:    #logicbuilt
+    name: str   
     count: int
     active: bool
     watts: float
@@ -141,7 +137,7 @@ class SWSDS:
                     if a.active: a.watts=self.power(a.name,True)
         self.calculate()
 
-    def select(self, wire_id):
+    def select(self, wire_id):       #recorrected wire id
         for w in self.wires.values(): w.selected=(w.id==wire_id and w.status=='CONNECTED')
 
     def snap_selected(self):
