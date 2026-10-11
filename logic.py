@@ -18,7 +18,7 @@ RANGES = {
     'Router/Network Switch':(5,50), 'Server/NAS':(30,200),
     'Smart Display':(5,30), 'EV Battery Pre-conditioning':(500,3000),
 }
-
+#inherit the flow
 @dataclass
 class Appliance:    #logicbuilt
     name: str   
