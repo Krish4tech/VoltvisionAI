@@ -8,7 +8,7 @@ RANGES = {
     'Fridge': (80,250), 'AC':(800,2000), 'Microwave':(800,1500),
     'LED':(5,20), 'Fan':(50,100), 'Iron':(1000,2000),
     'Toaster':(800,1500), 'EV':(1000,7400), 'Television':(60,200),
-    'WiFi Router':(5,20), 'Laptop':(30,100), 'Desktop Computer':(100,500),
+    'WiFi Router':(5,20), 'Laptop':(30,100), 'Desktop Computer':(100,500), //redefined loic sets
     'Gaming PC':(300,800), 'Washing Machine':(400,1500),
     'Electric Kettle':(1000,2500), 'Induction Stove':(1000,2500),
     'Electric Oven':(1500,3500), 'Water Heater/Geyser':(1500,3000),
