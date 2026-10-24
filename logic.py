@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 import random
 
-V_NOMINAL = 230.0 /refined codes
+V_NOMINAL = 230.0 /refined codes // updated logi 
 
 RANGES = {
     'Fridge': (80,250), 'AC':(800,2000), 'Microwave':(800,1500),
