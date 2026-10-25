@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 import random
 
-V_NOMINAL = 230.0 /refined codes // updated logi 
+V_NOMINAL = 230.0 
 
 RANGES = {
     'Fridge': (80,250), 'AC':(800,2000), 'Microwave':(800,1500),
@@ -18,9 +18,9 @@ RANGES = {
     'Router/Network Switch':(5,50), 'Server/NAS':(30,200),
     'Smart Display':(5,30), 'EV Battery Pre-conditioning':(500,3000),
 }
-#inherit the flow
+
 @dataclass
-class Appliance:    #logicbuilt
+class Appliance:    
     name: str   
     count: int
     active: bool
