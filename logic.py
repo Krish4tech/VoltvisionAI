@@ -80,7 +80,7 @@ class SWSDS:
         return out
 
     def make_network(self):
-        wires=[]; prev='TRANSFORMER'
+        wires=[]; prev='genreal transformer"
         for i in range(1,13):
             sec=f'SECTION_{i:02d}'
             wires.append(Wire(f'MAIN_{i:02d}',prev,sec,0.0015+0.0001*i))
