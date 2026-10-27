@@ -82,19 +82,9 @@ class SWSDS:
     def make_network(self):
         wires=[]; prev='genreal transformer"
         for i in range(1,13):
-            sec=f'SECTION_{i:02d}'
-            wires.append(Wire(f'MAIN_{i:02d}',prev,sec,0.0015+0.0001*i))
-            wires.append(Wire(f'BRANCH_{i:02d}',sec,f'HOUSE_{i:02d}',0.012+0.002*(i%4),'BRANCH'))
-            prev=sec
-        wires += [Wire('END_SECTION','SECTION_12','V2',0.003),Wire('END_RETURN','V2','END',0.002)]
-        return {w.id:w for w in wires}
 
-    def reachable(self):
-        adj={}
-        for w in self.wires.values():
-            if w.status!='CONNECTED': continue
-            adj.setdefault(w.a,[]).append(w.b); adj.setdefault(w.b,[]).append(w.a)
-        seen=set(); stack=['TRANSFORMER']
+
+    
         while stack:
             n=stack.pop()
             if n in seen: continue
